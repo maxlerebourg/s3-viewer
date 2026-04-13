@@ -8,7 +8,6 @@ import (
 	"io"
 	"log/slog"
 	"math"
-	"mime"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -66,6 +65,53 @@ func getEnv(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+// mimeTypes is a self-contained MIME table. It is used instead of
+// mime.TypeByExtension so the binary works on minimal images (scratch,
+// distroless) that ship without /etc/mime.types.
+var mimeTypes = map[string]string{
+	// audio
+	".mp3":  "audio/mpeg",
+	".ogg":  "audio/ogg",
+	".wav":  "audio/wav",
+	".flac": "audio/flac",
+	".aac":  "audio/aac",
+	".m4a":  "audio/mp4",
+	".opus": "audio/ogg; codecs=opus",
+	// video
+	".mp4":  "video/mp4",
+	".webm": "video/webm",
+	".ogv":  "video/ogg",
+	".mov":  "video/quicktime",
+	".avi":  "video/x-msvideo",
+	".mkv":  "video/x-matroska",
+	// image
+	".jpg":  "image/jpeg",
+	".jpeg": "image/jpeg",
+	".png":  "image/png",
+	".gif":  "image/gif",
+	".webp": "image/webp",
+	".svg":  "image/svg+xml",
+	".avif": "image/avif",
+	".ico":  "image/x-icon",
+	// document
+	".pdf":  "application/pdf",
+	".json": "application/json",
+	// text
+	".txt":  "text/plain; charset=utf-8",
+	".md":   "text/markdown; charset=utf-8",
+	".csv":  "text/csv; charset=utf-8",
+	".xml":  "text/xml; charset=utf-8",
+	".html": "text/html; charset=utf-8",
+	".js":   "application/javascript",
+}
+
+func mimeByExt(ext string) string {
+	if t, ok := mimeTypes[strings.ToLower(ext)]; ok {
+		return t
+	}
+	return "application/octet-stream"
 }
 
 func formatSize(b int64) string {
@@ -179,10 +225,7 @@ func (a *App) handleWatch(w http.ResponseWriter, r *http.Request) {
 		title = strings.TrimSuffix(name, filepath.Ext(name))
 	}
 
-	mimeType := mime.TypeByExtension(filepath.Ext(name))
-	if mimeType == "" {
-		mimeType = "application/octet-stream"
-	}
+	mimeType := mimeByExt(filepath.Ext(name))
 
 	size := int64(0)
 	if head.ContentLength != nil {
@@ -230,12 +273,7 @@ func (a *App) handleEmbed(w http.ResponseWriter, r *http.Request) {
 	}
 	defer result.Body.Close()
 
-	mimeType := mime.TypeByExtension(filepath.Ext(name))
-	if mimeType == "" {
-		mimeType = "application/octet-stream"
-	} else {
-		servedMime(mimeType)
-	}
+	mimeType := servedMime(mimeByExt(filepath.Ext(name)))
 
 	w.Header().Set("Content-Type", mimeType)
 	w.Header().Set("Accept-Ranges", "bytes")
