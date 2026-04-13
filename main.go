@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	_ "embed"
 	"fmt"
 	"html/template"
 	"io"
@@ -19,6 +20,12 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
+
+//go:embed favicon.ico
+var faviconICO []byte
+
+//go:embed template.html
+var templateHTML string
 
 type Config struct {
 	S3Bucket    string
@@ -124,7 +131,7 @@ func newApp(cfg Config) (*App, error) {
 	tmpl, err := template.New("watch").Funcs(template.FuncMap{
 		"formatSize": formatSize,
 		"hasPrefix":  strings.HasPrefix,
-	}).Parse(watchTemplate)
+	}).Parse(templateHTML)
 	if err != nil {
 		return nil, fmt.Errorf("parse template: %w", err)
 	}
@@ -134,14 +141,19 @@ func newApp(cfg Config) (*App, error) {
 
 func (a *App) routes() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/", a.handleWatch)
+	mux.HandleFunc("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "image/x-icon")
+		w.Header().Set("Cache-Control", "public, max-age=86400")
+		w.Write(faviconICO)
+	})
 	mux.HandleFunc("/e/", a.handleEmbed)
+	mux.HandleFunc("/", a.handleWatch)
 	return mux
 }
 
 type WatchData struct {
 	Name, Title, SiteTitle, VideoURL, PageURL, MimeType, Description string
-	Size                                                              int64
+	Size                                                             int64
 }
 
 func (a *App) handleWatch(w http.ResponseWriter, r *http.Request) {
@@ -182,7 +194,7 @@ func (a *App) handleWatch(w http.ResponseWriter, r *http.Request) {
 		Title:       title,
 		SiteTitle:   a.cfg.SiteTitle,
 		VideoURL:    a.cfg.SiteURL + "/e/" + name,
-		PageURL:     a.cfg.SiteURL + "/watch/" + name,
+		PageURL:     a.cfg.SiteURL + "/" + name,
 		MimeType:    mimeType,
 		Size:        size,
 		Description: head.Metadata["description"],
@@ -218,13 +230,14 @@ func (a *App) handleEmbed(w http.ResponseWriter, r *http.Request) {
 	}
 	defer result.Body.Close()
 
-
 	mimeType := mime.TypeByExtension(filepath.Ext(name))
 	if mimeType == "" {
 		mimeType = "application/octet-stream"
+	} else {
+		servedMime(mimeType)
 	}
 
-	w.Header().Set("Content-Type", servedMime(mimeType))
+	w.Header().Set("Content-Type", mimeType)
 	w.Header().Set("Accept-Ranges", "bytes")
 	if result.ContentLength != nil {
 		w.Header().Set("Content-Length", fmt.Sprintf("%d", *result.ContentLength))
@@ -238,6 +251,8 @@ func (a *App) handleEmbed(w http.ResponseWriter, r *http.Request) {
 	reader := io.LimitReader(result.Body, maxStream)
 	if _, err := io.Copy(w, reader); err != nil {
 		slog.Error("stream error", "key", name, "err", err)
+	} else {
+		slog.Info("embed done", "key", name, "contentType", mimeType)
 	}
 }
 
