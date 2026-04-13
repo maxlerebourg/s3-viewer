@@ -1,0 +1,27 @@
+version: 2
+
+project_name: s3-viewer
+
+builds:
+  - dir: ./
+    mod_timestamp: '{{ .CommitTimestamp }}'
+    env:
+      - CGO_ENABLED=0
+    ldflags:
+      - "-s -w"
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+
+dockers_v2:
+  - images:
+      - "ghcr.io/{{ .Env.REPO_OWNER }}/{{ .ProjectName }}"
+    dockerfile: Dockerfile.release
+    tags:
+      - "v{{ .Version }}"
+      - "latest"
+
+checksum:
+  name_template: "checksums.txt"

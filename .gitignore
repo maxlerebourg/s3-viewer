@@ -1,0 +1,11 @@
+tmp/
+
+# Secrets & local launch scripts
+.env
+*.env
+
+# Build output
+clipface-go
+
+# macOS
+.DS_Store

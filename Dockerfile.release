@@ -1,0 +1,7 @@
+FROM scratch AS final
+
+ARG TARGETPLATFORM
+
+COPY $TARGETPLATFORM/s3-viewer /s3-viewer
+
+ENTRYPOINT ["/s3-viewer"]
