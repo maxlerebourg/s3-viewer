@@ -209,41 +209,46 @@ func (a *App) handleWatch(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid name", http.StatusBadRequest)
 		return
 	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
 	head, err := a.s3.HeadObject(r.Context(), &s3.HeadObjectInput{
 		Bucket: aws.String(a.cfg.S3Bucket),
 		Key:    aws.String(name),
 	})
-	if err != nil {
-		slog.Error("HeadObject", "key", name, "err", err)
-		http.NotFound(w, r)
-		return
-	}
 
-	title := head.Metadata["title"]
-	if title == "" {
-		title = strings.TrimSuffix(name, filepath.Ext(name))
-	}
-
+	title := ""
+	description := ""
+	size := int64(0)
 	mimeType := mimeByExt(filepath.Ext(name))
 
-	size := int64(0)
-	if head.ContentLength != nil {
-		size = *head.ContentLength
+	if err != nil {
+		slog.Error("HeadObject", "key", name, "err", err)
+		w.WriteHeader(http.StatusNotFound)
+		mimeType = "application/octet-stream"
+		title = "Not found"
+	} else {
+		slog.Info("HeadObject", "key", name)
+		w.WriteHeader(http.StatusOK)
+		title = head.Metadata["title"]
+		description = head.Metadata["description"]
+		if head.ContentLength != nil {
+			size = *head.ContentLength
+		}
+	}
+	if title == "" {
+		title = strings.TrimSuffix(name, filepath.Ext(name))
 	}
 
 	data := WatchData{
 		Name:        name,
 		Title:       title,
+		Description: description,
 		SiteTitle:   a.cfg.SiteTitle,
 		VideoURL:    a.cfg.SiteURL + "/e/" + name,
 		PageURL:     a.cfg.SiteURL + "/" + name,
 		MimeType:    mimeType,
 		Size:        size,
-		Description: head.Metadata["description"],
 	}
-
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := a.tmpl.Execute(w, data); err != nil {
 		slog.Error("template", "err", err)
 	}
@@ -288,9 +293,9 @@ func (a *App) handleEmbed(w http.ResponseWriter, r *http.Request) {
 	const maxStream = 500 << 20 // 500 MB cap for non-range requests
 	reader := io.LimitReader(result.Body, maxStream)
 	if _, err := io.Copy(w, reader); err != nil {
-		slog.Error("stream error", "key", name, "err", err)
+		slog.Error("embed error", "key", name, "err", err)
 	} else {
-		slog.Info("embed done", "key", name, "contentType", mimeType)
+		slog.Info("embed done", "key", name)
 	}
 }
 
