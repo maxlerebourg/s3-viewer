@@ -160,6 +160,8 @@ func newApp(cfg Config) (*App, error) {
 		awsOpts = append(awsOpts, config.WithCredentialsProvider(
 			credentials.NewStaticCredentialsProvider(cfg.S3AccessKey, cfg.S3SecretKey, ""),
 		))
+	} else {
+		awsOpts = append(awsOpts, config.WithCredentialsProvider(aws.AnonymousCredentials{}))
 	}
 	awsCfg, err := config.LoadDefaultConfig(context.Background(), awsOpts...)
 	if err != nil {
@@ -222,12 +224,12 @@ func (a *App) handleWatch(w http.ResponseWriter, r *http.Request) {
 	mimeType := mimeByExt(filepath.Ext(name))
 
 	if err != nil {
-		slog.Error("HeadObject", "key", name, "err", err)
+		slog.Error("watch HeadObject error", "key", name, "err", err)
 		w.WriteHeader(http.StatusNotFound)
 		mimeType = "application/octet-stream"
 		title = "Not found"
 	} else {
-		slog.Info("HeadObject", "key", name)
+		slog.Info("watch HeadObject", "key", name)
 		w.WriteHeader(http.StatusOK)
 		title = head.Metadata["title"]
 		description = head.Metadata["description"]
@@ -250,7 +252,7 @@ func (a *App) handleWatch(w http.ResponseWriter, r *http.Request) {
 		Size:        size,
 	}
 	if err := a.tmpl.Execute(w, data); err != nil {
-		slog.Error("template", "err", err)
+		slog.Error("watch template", "err", err)
 	}
 }
 
@@ -272,7 +274,7 @@ func (a *App) handleEmbed(w http.ResponseWriter, r *http.Request) {
 
 	result, err := a.s3.GetObject(r.Context(), input)
 	if err != nil {
-		slog.Error("GetObject", "key", name, "err", err)
+		slog.Error("embed GetObject", "key", name, "err", err)
 		http.NotFound(w, r)
 		return
 	}
@@ -295,7 +297,7 @@ func (a *App) handleEmbed(w http.ResponseWriter, r *http.Request) {
 	if _, err := io.Copy(w, reader); err != nil {
 		slog.Error("embed error", "key", name, "err", err)
 	} else {
-		slog.Info("embed done", "key", name)
+		slog.Info("embed", "key", name)
 	}
 }
 
